@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
+import 'core/firebase/firebase_config.dart';
 import 'features/auth/presentation/pages/login_screen.dart';
 import 'features/auth/presentation/pages/signup_screen.dart';
 import 'features/auth/presentation/pages/forgot_password_screen.dart';
@@ -15,7 +17,16 @@ import 'features/profile/presentation/pages/about_screen.dart';
 import 'features/trending/presentation/pages/trending_screen.dart';
 import 'shared/widgets/logo_widget.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  try {
+    await FirebaseConfig.initialize();
+    print('✅ Firebase initialized successfully');
+  } catch (e) {
+    print('❌ Firebase initialization failed: $e');
+  }
+  
   runApp(const LCMTVApp());
 }
 
