@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/logo_widget.dart';
+import '../cubit/auth_cubit.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class LoginScreenSimple extends StatefulWidget {
+  const LoginScreenSimple({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<LoginScreenSimple> createState() => _LoginScreenSimpleState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenSimpleState extends State<LoginScreenSimple> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -24,52 +25,52 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() async {
+    print('🔵 Login button pressed');
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // Simulate login process
-      await Future.delayed(const Duration(seconds: 2));
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      // Navigate to main screen
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/main');
-      }
+      print('🔵 Form is valid, calling AuthCubit.login');
+      // Use Firebase authentication
+      context.read<AuthCubit>().login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+    } else {
+      print('🔵 Form validation failed');
     }
   }
 
   void _handleGoogleSignIn() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Simulate Google sign in
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/main');
-    }
+    print('🔵 Google Sign-In button pressed');
+    // Use Firebase Google authentication
+    context.read<AuthCubit>().googleSignIn();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundWhite,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppTheme.spacingL),
-          child: Form(
-            key: _formKey,
-            child: Column(
+    return BlocProvider(
+      create: (context) => AuthCubit(),
+      child: BlocListener<AuthCubit, AuthState>(
+        listener: (context, state) {
+          if (state is AuthAuthenticated) {
+            print('✅ Authentication successful: ${state.user.email}');
+            Navigator.of(context).pushReplacementNamed('/main');
+          } else if (state is AuthError) {
+            print('❌ Authentication error: ${state.message}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: AppTheme.errorRed,
+              ),
+            );
+          }
+        },
+        child: Scaffold(
+          backgroundColor: AppTheme.backgroundWhite,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppTheme.spacingL),
+              child: Form(
+                key: _formKey,
+                child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: AppTheme.spacingXXL),
@@ -107,10 +108,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
+                      decoration: InputDecoration(
                     labelText: 'Email',
-                    hintText: 'Enter your email',
-                    prefixIcon: Icon(Icons.email_outlined),
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                        ),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -131,11 +134,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscureText: _obscurePassword,
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    hintText: 'Enter your password',
                     prefixIcon: const Icon(Icons.lock_outlined),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            _obscurePassword ? Icons.visibility : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() {
@@ -143,6 +145,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         });
                       },
                     ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                        ),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -155,67 +160,63 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 
-                const SizedBox(height: AppTheme.spacingS),
-                
-                // Forgot Password
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pushNamed('/forgot-password');
-                    },
-                    child: const Text('Forgot Password?'),
-                  ),
-                ),
-                
-                const SizedBox(height: AppTheme.spacingXL),
+                    const SizedBox(height: AppTheme.spacingL),
                 
                 // Login Button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _handleLogin,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              AppTheme.backgroundWhite,
+                BlocBuilder<AuthCubit, AuthState>(
+                  builder: (context, state) {
+                    final isLoading = state is AuthLoading;
+                    return ElevatedButton(
+                      onPressed: isLoading ? null : _handleLogin,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppTheme.spacingM,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppTheme.radiusM),
                             ),
                           ),
-                        )
-                      : const Text('Sign In'),
-                ),
-                
-                const SizedBox(height: AppTheme.spacingL),
-                
-                // Divider
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingM),
-                      child: Text(
-                        'OR',
-                        style: AppTheme.bodyMedium.copyWith(
-                          color: AppTheme.textLight,
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider()),
-                  ],
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppTheme.backgroundWhite,
+                                ),
+                              ),
+                            )
+                          : const Text('Sign In'),
+                    );
+                  },
                 ),
                 
                 const SizedBox(height: AppTheme.spacingL),
                 
                 // Google Sign In Button
-                OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _handleGoogleSignIn,
-                  icon: const Icon(Icons.g_mobiledata, size: 24),
-                  label: const Text('Continue with Google'),
+                BlocBuilder<AuthCubit, AuthState>(
+                  builder: (context, state) {
+                    final isLoading = state is AuthLoading;
+                    return OutlinedButton.icon(
+                      onPressed: isLoading ? null : _handleGoogleSignIn,
+                      icon: const Icon(Icons.g_mobiledata, size: 24),
+                      label: const Text('Continue with Google'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppTheme.spacingM,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                            ),
+                          ),
+                    );
+                  },
                 ),
                 
-                const SizedBox(height: AppTheme.spacingXL),
+                    const SizedBox(height: AppTheme.spacingL),
                 
                 // Sign Up Link
                 Row(
@@ -231,11 +232,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: () {
                         Navigator.of(context).pushNamed('/signup');
                       },
-                      child: const Text('Sign Up'),
+                          child: Text(
+                            'Sign Up',
+                            style: AppTheme.bodyMedium.copyWith(
+                              color: AppTheme.primaryPurple,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

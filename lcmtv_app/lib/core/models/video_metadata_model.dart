@@ -17,6 +17,7 @@ class VideoMetadata {
   final String categoryTitle;
   final List<String> tags;
   final bool isLive;
+  final int viewCount;
   final String? liveUrl;
   final DateTime? liveStartTime;
   final DateTime? liveEndTime;
@@ -34,6 +35,7 @@ class VideoMetadata {
     required this.categoryTitle,
     this.tags = const [],
     this.isLive = false,
+    this.viewCount = 0,
     this.liveUrl,
     this.liveStartTime,
     this.liveEndTime,

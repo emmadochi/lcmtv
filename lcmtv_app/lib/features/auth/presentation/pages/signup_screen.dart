@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/logo_widget.dart';
+import '../cubit/auth_cubit.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -30,52 +32,59 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   void _handleSignup() async {
+    print('🔵 SIGNUP BUTTON PRESSED');
     if (_formKey.currentState!.validate() && _acceptTerms) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // Simulate signup process
-      await Future.delayed(const Duration(seconds: 2));
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      // Navigate to main screen
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/main');
-      }
+      print('🔵 Form is valid and terms accepted, calling AuthCubit.signup');
+      context.read<AuthCubit>().signup(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        displayName: _nameController.text.trim(),
+      );
     } else if (!_acceptTerms) {
+      print('🔵 Terms not accepted');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please accept the terms and conditions'),
           backgroundColor: AppTheme.errorRed,
         ),
       );
+    } else {
+      print('🔵 Form validation failed');
     }
   }
 
   void _handleGoogleSignIn() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Simulate Google sign in
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/main');
-    }
+    context.read<AuthCubit>().googleSignIn();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return BlocProvider(
+      create: (context) => AuthCubit(),
+      child: BlocListener<AuthCubit, AuthState>(
+        listener: (context, state) {
+          if (state is AuthAuthenticated) {
+            print('✅ Signup successful: ${state.user.email}');
+            Navigator.of(context).pushReplacementNamed('/main');
+          } else if (state is AuthError) {
+            print('❌ Signup error: ${state.message}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: AppTheme.errorRed,
+              ),
+            );
+          } else if (state is AuthEmailVerificationSent) {
+            print('✅ Email verification sent to: ${state.email}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Verification email sent to ${state.email}'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+        child: Scaffold(
       backgroundColor: AppTheme.backgroundWhite,
       appBar: AppBar(
         backgroundColor: AppTheme.backgroundWhite,
@@ -277,20 +286,36 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: AppTheme.spacingXL),
                 
                 // Sign Up Button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _handleSignup,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              AppTheme.backgroundWhite,
-                            ),
-                          ),
-                        )
-                      : const Text('Create Account'),
+                BlocBuilder<AuthCubit, AuthState>(
+                  builder: (context, state) {
+                    final isLoading = state is AuthLoading;
+                    print('🔵 Signup BlocBuilder - isLoading: $isLoading, state: ${state.runtimeType}');
+                    return ElevatedButton(
+                      onPressed: isLoading ? null : _handleSignup,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppTheme.spacingM,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                        ),
+                      ),
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Text('Create Account'),
+                    );
+                  },
                 ),
                 
                 const SizedBox(height: AppTheme.spacingL),
@@ -315,10 +340,23 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: AppTheme.spacingL),
                 
                 // Google Sign In Button
-                OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _handleGoogleSignIn,
-                  icon: const Icon(Icons.g_mobiledata, size: 24),
-                  label: const Text('Continue with Google'),
+                BlocBuilder<AuthCubit, AuthState>(
+                  builder: (context, state) {
+                    final isLoading = state is AuthLoading;
+                    return OutlinedButton.icon(
+                      onPressed: isLoading ? null : _handleGoogleSignIn,
+                      icon: const Icon(Icons.g_mobiledata, size: 24),
+                      label: const Text('Continue with Google'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppTheme.spacingM,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 
                 const SizedBox(height: AppTheme.spacingXL),

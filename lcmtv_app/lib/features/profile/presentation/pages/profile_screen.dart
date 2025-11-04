@@ -228,6 +228,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     subtitle: 'App version and information',
                     onTap: () => _navigateToAbout(),
                   ),
+                  _buildDivider(),
+                  _buildMenuItem(
+                    icon: Icons.admin_panel_settings,
+                    title: 'Admin Dashboard',
+                    subtitle: 'Content Management System',
+                    onTap: () => Navigator.of(context).pushNamed('/admin'),
+                  ),
                 ],
               ),
             ),

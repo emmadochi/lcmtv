@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/theme/app_theme.dart';
 import 'core/firebase/firebase_config.dart';
-import 'features/auth/presentation/pages/login_screen.dart';
-import 'features/auth/presentation/pages/signup_screen.dart';
+import 'core/services/youtube_service.dart';
+import 'core/config/app_config.dart';
+import 'features/auth/presentation/pages/login_screen_fixed.dart';
+import 'features/auth/presentation/pages/signup_screen_fixed.dart';
+import 'features/auth/presentation/cubit/auth_cubit.dart';
 import 'features/auth/presentation/pages/forgot_password_screen.dart';
 import 'features/auth/presentation/pages/onboarding_screen.dart';
 import 'features/auth/presentation/pages/email_verification_screen.dart';
-import 'features/home/presentation/pages/home_screen.dart';
+import 'features/home/presentation/pages/modern_home_screen.dart';
+import 'features/home/presentation/cubit/home_cubit.dart';
+import 'features/video/data/repositories/test_video_repository.dart';
+import 'features/video/domain/repositories/video_repository.dart';
+import 'core/services/youtube_service.dart';
+import 'core/services/test_data_service.dart';
 import 'features/search/presentation/pages/search_screen.dart';
 import 'features/profile/presentation/pages/profile_screen.dart';
 import 'features/profile/presentation/pages/edit_profile_screen.dart';
@@ -15,16 +25,51 @@ import 'features/profile/presentation/pages/watch_history_screen.dart';
 import 'features/profile/presentation/pages/liked_videos_screen.dart';
 import 'features/profile/presentation/pages/about_screen.dart';
 import 'features/trending/presentation/pages/trending_screen.dart';
+import 'features/debug/presentation/pages/firebase_test_screen.dart';
+import 'features/debug/presentation/pages/auth_audit_screen.dart';
+import 'features/admin/presentation/pages/admin_dashboard.dart';
+import 'features/admin/data/repositories/admin_repository_impl.dart';
+import 'features/admin/presentation/cubit/admin_cubit.dart';
+import 'core/services/firestore_test_data_service.dart';
 import 'shared/widgets/logo_widget.dart';
+import 'core/auth/firebase_auth_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
+    // Initialize Firebase
     await FirebaseConfig.initialize();
     print('✅ Firebase initialized successfully');
   } catch (e) {
     print('❌ Firebase initialization failed: $e');
+    print('⚠️ Continuing without Firebase - some features may not work');
+  }
+  
+  try {
+    // Initialize YouTube service
+    YouTubeService.initialize(apiKey: AppConfig.youtubeApiKey);
+    print('✅ YouTube service initialized');
+  } catch (e) {
+    print('❌ YouTube service initialization failed: $e');
+  }
+  
+  try {
+    // Initialize SharedPreferences
+    await SharedPreferences.getInstance();
+    print('✅ SharedPreferences initialized');
+  } catch (e) {
+    print('❌ SharedPreferences initialization failed: $e');
+  }
+  
+  // Initialize Firestore test data (optional)
+  if (AppConfig.seedFirestoreOnStartup) {
+    try {
+      await FirestoreTestDataService.initializeTestData();
+      print('✅ Firestore test data initialized');
+    } catch (e) {
+      print('❌ Firestore test data initialization failed: $e');
+    }
   }
   
   runApp(const LCMTVApp());
@@ -39,11 +84,17 @@ class LCMTVApp extends StatelessWidget {
       title: 'LCMTV',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const SplashScreen(),
+              home: const MainScreen(),
       routes: {
         '/onboarding': (context) => const OnboardingScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/signup': (context) => const SignupScreen(),
+        '/login': (context) => BlocProvider<AuthCubit>(
+              create: (context) => AuthCubit(),
+              child: const LoginScreen(),
+            ),
+        '/signup': (context) => BlocProvider<AuthCubit>(
+              create: (context) => AuthCubit(),
+              child: const SignupScreen(),
+            ),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/email-verification': (context) => EmailVerificationScreen(
           email: 'user@example.com', // This should come from the signup process
@@ -52,7 +103,15 @@ class LCMTVApp extends StatelessWidget {
         '/edit-profile': (context) => const EditProfileScreen(),
         '/watch-history': (context) => const WatchHistoryScreen(),
         '/liked-videos': (context) => const LikedVideosScreen(),
-        '/about': (context) => const AboutScreen(),
+                '/about': (context) => const AboutScreen(),
+                '/firebase-test': (context) => const FirebaseTestScreen(),
+                '/auth-audit': (context) => const AuthAuditScreen(),
+                '/admin': (context) => BlocProvider(
+                  create: (context) => AdminCubit(
+                    adminRepository: AdminRepositoryImpl(),
+                  ),
+                  child: const AdminDashboard(),
+                ),
       },
     );
   }
@@ -125,6 +184,7 @@ class _SplashScreenState extends State<SplashScreen>
               opacity: _fadeAnimation,
               child: ScaleTransition(
                 scale: _scaleAnimation,
+        child: SingleChildScrollView(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -166,6 +226,7 @@ class _SplashScreenState extends State<SplashScreen>
           ],
         ),
       ),
+      ),
             );
           },
         ),
@@ -184,12 +245,31 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const TrendingScreen(),
-    const SearchScreen(),
-    const ProfileScreen(),
-  ];
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize test video repository with real-time data
+    final videoRepository = TestVideoRepository();
+    
+    // Start real-time data updates
+    TestDataService().startRealTimeUpdates();
+    
+            _screens = [
+              const ModernHomeScreen(),
+              const TrendingScreen(),
+              const SearchScreen(),
+              const ProfileScreen(),
+            ];
+  }
+
+  @override
+  void dispose() {
+    // Stop real-time data updates when screen is disposed
+    TestDataService().stopRealTimeUpdates();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

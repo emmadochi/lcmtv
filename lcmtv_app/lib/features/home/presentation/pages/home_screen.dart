@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/models/video_metadata_model.dart';
+import '../../../../core/models/category_model.dart';
 import '../../../../shared/widgets/video_card.dart';
 import '../../../../shared/widgets/program_card.dart';
 import '../../../../shared/widgets/category_chip.dart';
 import '../../../../shared/widgets/navigation_components.dart';
 import '../../../../shared/widgets/logo_widget.dart';
+import '../../../../features/video/domain/repositories/video_repository.dart';
+import '../../../../features/video/data/repositories/video_repository_impl.dart';
+import '../../../../features/video/data/datasources/video_remote_datasource.dart';
+import '../../../../features/video/data/datasources/video_local_datasource.dart';
+import '../../../../core/firebase/firebase_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../cubit/home_cubit.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -175,33 +187,107 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        
+        return BlocProvider(
+          create: (context) => HomeCubit(
+            videoRepository: VideoRepositoryImpl(
+              remoteDataSource: VideoRemoteDataSourceImpl(
+                firestore: FirebaseFirestore.instance,
+                auth: FirebaseAuth.instance,
+              ),
+              localDataSource: VideoLocalDataSourceImpl(
+                prefs: snapshot.data!,
+              ),
+              firestore: FirebaseFirestore.instance,
+              auth: FirebaseAuth.instance,
+            ),
+          )..loadHomeData(),
+          child: BlocBuilder<HomeCubit, HomeState>(
+        builder: (context, state) {
+          if (state is HomeLoading) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppTheme.primaryPurple,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          if (state is HomeError) {
+            return Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: AppTheme.errorRed,
+                    ),
+                    const SizedBox(height: AppTheme.spacingL),
+                    Text(
+                      'Error loading content',
+                      style: AppTheme.headingMedium,
+                    ),
+                    const SizedBox(height: AppTheme.spacingS),
+                    Text(
+                      state.message,
+                      style: AppTheme.bodyMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppTheme.spacingL),
+                    ElevatedButton(
+                      onPressed: () => context.read<HomeCubit>().loadHomeData(),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          if (state is HomeLoaded) {
     return Scaffold(
       backgroundColor: AppTheme.lightGray,
       appBar: _buildAppBar(),
       body: RefreshIndicator(
-        onRefresh: _onRefresh,
+                onRefresh: () => context.read<HomeCubit>().refreshHomeData(),
         color: AppTheme.primaryPurple,
         child: CustomScrollView(
           controller: _scrollController,
           slivers: [
             // Livestream Hero Section
+                    if (state.liveStreams.isNotEmpty)
             SliverToBoxAdapter(
-              child: _buildLivestreamHero(),
+                        child: _buildLivestreamHero(state.liveStreams.first),
             ),
             
             // Categories Section
             SliverToBoxAdapter(
-              child: _buildCategoriesSection(),
+                      child: _buildCategoriesSection(state.categories),
             ),
             
             // Featured Videos Section
             SliverToBoxAdapter(
-              child: _buildFeaturedSection(),
+                      child: _buildFeaturedSection(state.featuredVideos),
             ),
             
-            // Programs Section
+                    // Trending Videos Section
             SliverToBoxAdapter(
-              child: _buildProgramsSection(),
+                      child: _buildTrendingSection(state.trendingVideos),
             ),
             
             // Loading Indicator
@@ -228,6 +314,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           // Navigate to create content
         },
       ),
+            );
+          }
+
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppTheme.primaryPurple,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+        );
+      },
     );
   }
 
@@ -273,7 +375,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildLivestreamHero() {
+  Widget _buildLivestreamHero(VideoMetadata liveStream) {
     return Container(
       margin: const EdgeInsets.all(AppTheme.spacingM),
       decoration: BoxDecoration(
@@ -298,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 color: AppTheme.lightGray,
               ),
               child: Image.network(
-                _livestreamData['thumbnailUrl'],
+                liveStream.thumbnailUrl,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
@@ -419,7 +521,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _livestreamData['title'],
+                      liveStream.title,
                     style: AppTheme.headingMedium.copyWith(
                       color: AppTheme.backgroundWhite,
                       fontWeight: FontWeight.bold,
@@ -431,7 +533,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   Row(
                     children: [
                       Text(
-                        _livestreamData['channelName'],
+                          liveStream.channelTitle,
                         style: AppTheme.bodyMedium.copyWith(
                           color: AppTheme.backgroundWhite,
                           fontWeight: FontWeight.w500,
@@ -448,7 +550,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           borderRadius: BorderRadius.circular(AppTheme.radiusS),
                         ),
                         child: Text(
-                          _livestreamData['category'],
+                            liveStream.categoryTitle,
                           style: const TextStyle(
                             color: AppTheme.backgroundWhite,
                             fontSize: 10,
@@ -467,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildCategoriesSection() {
+  Widget _buildCategoriesSection(List<CategoryModel> categories) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppTheme.spacingM),
       child: Column(
@@ -484,22 +586,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             height: 40,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: _categories.length,
+              itemCount: categories.length,
               itemBuilder: (context, index) {
-                final category = _categories[index];
-                final isSelected = _selectedCategory == category;
+                final category = categories[index];
+                final isSelected = _selectedCategory == category.title;
                 
                 return Padding(
                   padding: const EdgeInsets.only(right: AppTheme.spacingS),
                   child: CategoryChip(
-                    label: category,
+                    label: category.title,
                     isSelected: isSelected,
                     onTap: () {
                       setState(() {
-                        _selectedCategory = category;
+                        _selectedCategory = category.title;
                       });
+                      context.read<HomeCubit>().loadTrendingVideos(
+                        categoryId: category.id,
+                      );
                     },
-                    icon: category == 'Live' ? Icons.live_tv : null,
+                    icon: category.title == 'Live' ? Icons.live_tv : null,
                   ),
                 );
               },
@@ -510,7 +615,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildFeaturedSection() {
+  Widget _buildFeaturedSection(List<VideoMetadata> featuredVideos) {
     return Container(
       margin: const EdgeInsets.all(AppTheme.spacingM),
       child: Column(
@@ -534,18 +639,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
           const SizedBox(height: AppTheme.spacingM),
-          ..._featuredVideos.map((video) {
+          ...featuredVideos.map((video) {
             return Padding(
               padding: const EdgeInsets.only(bottom: AppTheme.spacingM),
               child: VideoCard(
-                thumbnailUrl: video['thumbnailUrl'],
-                title: video['title'],
-                channelName: video['channelName'],
-                duration: video['duration'],
-                views: video['views'],
-                uploadTime: video['uploadTime'],
+                thumbnailUrl: video.thumbnailUrl,
+                title: video.title,
+                channelName: video.channelTitle,
+                duration: _formatDuration(video.duration),
+                views: _formatViewCount(video.viewCount),
+                uploadTime: _formatUploadTime(video.publishedAt),
                 onTap: () {
-                  // Navigate to video player
+                  Navigator.of(context).pushNamed(
+                    '/video-player',
+                    arguments: video,
+                  );
                 },
                 onChannelTap: () {
                   // Navigate to channel
@@ -556,6 +664,100 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ],
       ),
     );
+  }
+
+  Widget _buildTrendingSection(List<VideoMetadata> trendingVideos) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: AppTheme.spacingM),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Trending Now',
+                style: AppTheme.headingMedium.copyWith(
+                  color: AppTheme.textDark,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Navigate to trending screen
+                },
+                child: const Text('See All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingM),
+          ...trendingVideos.take(5).map((video) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppTheme.spacingM),
+              child: VideoCard(
+                thumbnailUrl: video.thumbnailUrl,
+                title: video.title,
+                channelName: video.channelTitle,
+                duration: _formatDuration(video.duration),
+                views: _formatViewCount(video.viewCount),
+                uploadTime: _formatUploadTime(video.publishedAt),
+                onTap: () {
+                  Navigator.of(context).pushNamed(
+                    '/video-player',
+                    arguments: video,
+                  );
+                },
+                onChannelTap: () {
+                  // Navigate to channel
+                },
+              ),
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
+  // Helper methods
+  String _formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    
+    if (hours > 0) {
+      return '${hours}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    } else {
+      return '${minutes}:${seconds.toString().padLeft(2, '0')}';
+    }
+  }
+
+  String _formatViewCount(int viewCount) {
+    if (viewCount >= 1000000) {
+      return '${(viewCount / 1000000).toStringAsFixed(1)}M';
+    } else if (viewCount >= 1000) {
+      return '${(viewCount / 1000).toStringAsFixed(1)}K';
+    } else {
+      return viewCount.toString();
+    }
+  }
+
+  String _formatUploadTime(String publishedAt) {
+    try {
+      final date = DateTime.parse(publishedAt);
+      final now = DateTime.now();
+      final difference = now.difference(date);
+      
+      if (difference.inDays > 0) {
+        return '${difference.inDays} day${difference.inDays == 1 ? '' : 's'} ago';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours} hour${difference.inHours == 1 ? '' : 's'} ago';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes} minute${difference.inMinutes == 1 ? '' : 's'} ago';
+      } else {
+        return 'Just now';
+      }
+    } catch (e) {
+      return 'Unknown';
+    }
   }
 
   Widget _buildProgramsSection() {

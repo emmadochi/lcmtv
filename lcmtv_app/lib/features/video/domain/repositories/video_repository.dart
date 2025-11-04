@@ -1,5 +1,5 @@
-import '../../../core/models/youtube_video_model.dart';
-import '../../../core/models/category_model.dart';
+import '../../../../core/models/youtube_video_model.dart';
+import '../../../../core/models/category_model.dart';
 
 abstract class VideoRepository {
   /// Get trending videos with optional category filtering

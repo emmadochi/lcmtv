@@ -58,16 +58,22 @@ class FirebaseConfig {
 
   static Future<void> initialize() async {
     try {
-      _app = await Firebase.initializeApp(
-        name: 'LCTV',
-        options: const FirebaseOptions(
-          apiKey: 'AIzaSyD40EuLRhosdphGnUfQOaQWmMRUkOk-V-E',
-          appId: '1:679833147395:android:fe55390bb1e61019a35636',
-          messagingSenderId: 'YOUR_SENDER_ID',
-          projectId: 'LCTV',
-          storageBucket: 'LCTV.appspot.com',
-        ),
-      );
+      // Check if Firebase is already initialized
+      if (Firebase.apps.isNotEmpty) {
+        _app = Firebase.app();
+        print('✅ Firebase already initialized');
+      } else {
+        _app = await Firebase.initializeApp(
+          options: const FirebaseOptions(
+            apiKey: 'AIzaSyD40EuLRhosdphGnUfQOaQWmMRUkOk-V-E',
+            appId: '1:679833147395:android:fe55390bb1e61019a35636',
+            messagingSenderId: '679833147395',
+            projectId: 'lctv-dea2d',
+            storageBucket: 'lctv-dea2d.firebasestorage.app',
+          ),
+        );
+        print('✅ Firebase initialized with default app');
+      }
 
       // Initialize services
       _auth = FirebaseAuth.instance;
@@ -75,6 +81,16 @@ class FirebaseConfig {
       _analytics = FirebaseAnalytics.instance;
       _crashlytics = FirebaseCrashlytics.instance;
       _storage = FirebaseStorage.instance;
+
+      // Ensure an authenticated session for rules requiring auth
+      if (_auth!.currentUser == null) {
+        try {
+          await _auth!.signInAnonymously();
+          print('✅ Signed in anonymously for Firestore access');
+        } catch (e) {
+          print('❌ Anonymous sign-in failed: $e');
+        }
+      }
 
       // Configure services
       await _configureFirestore();

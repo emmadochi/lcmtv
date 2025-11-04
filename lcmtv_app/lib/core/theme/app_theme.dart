@@ -6,11 +6,13 @@ class AppTheme {
   static const Color secondaryPurple = Color(0xFF8B5CF6);
   static const Color lightPurple = Color(0xFFA78BFA);
   static const Color backgroundWhite = Color(0xFFFFFFFF);
+  static const Color backgroundLight = Color(0xFFF8FAFC);
   static const Color lightGray = Color(0xFFFAFAFA);
   static const Color textDark = Color(0xFF1F2937);
   static const Color textLight = Color(0xFF6B7280);
   static const Color errorRed = Color(0xFFEF4444);
   static const Color successGreen = Color(0xFF10B981);
+  static const Color borderLight = Color(0xFFE5E7EB);
 
   // Spacing
   static const double spacingXS = 4.0;
